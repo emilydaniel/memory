@@ -1,7 +1,13 @@
 <h1>Memory Game</h1>
 
-<div id="game">
-  Loading...
+<div id="index">
+  <div class="row">
+    <div class="col">
+      <p><input type="Text" id="game-input"></p>
+      <p><button id="game-button">Enter</button></p>
+      <p id="game-output"></p>
+    </div>
+  </div
 </div>
 
 

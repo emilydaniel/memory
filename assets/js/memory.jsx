@@ -1,94 +1,45 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { Button } from 'reactstrap';
+import socket from './socket';
 
-export default function run_memory(root) {
-  ReactDOM.render(<MemoryGame />, root);
+export default function run_memory(root, gameName) {
+  ReactDOM.render(<MemoryGame gameName={gameName}/>, root);
 }
 
 class MemoryGame extends React.Component {
     constructor(props) {
         super(props);
+        this.channel = socket.channel("games:" + props.gameName, {});
         this.state = { 
-            cards: _.shuffle(["A", "B", "C", "D", "E", "F", "G", "H", 
-                              "A", "B", "C", "D", "E", "F", "G", "H"]),
+            //cards: _.shuffle(["A", "B", "C", "D", "E", "F", "G", "H", 
+                              //"A", "B", "C", "D", "E", "F", "G", "H"]),
+            cards: [],
             foundPairs: [],
             guess: [],
             score: 0,
-        }
+        };
+
+        this.channel.join()
+            .receive("ok", this.showView.bind(this))
+            .receive("error", (resp) => { 
+                console.log("GAME: Unable to join", resp) 
+            });
+    }
+
+    showView(view) {
+        console.log("New View", view);
+        this.setState(view.game);
     }
     
     clickEvent(me, cardIndex) {
-        let input = $(me.target);
-        if (_.size(this.state.guess) == 2) {
-            //do nothing because they've clicked on 2 already
-        }
-        else {
-            //check if they've clicked on the same card twice or it's
-            //in foundPairs
-            if (_.contains(this.state.guess, cardIndex) ||
-                _.contains(this.state.foundPairs, 
-                    this.state.cards[cardIndex])) {
-                //do nothing because they've either clicked on this or
-                //found it
-            }
-            else {
-                //flip the card over
-                let state1 = _.extend(this.state, {
-                    guess: this.state.guess.concat(cardIndex),
-                    score: this.state.score + 1,
-                });
-                this.setState(state1);
-
-                if (_.size(this.state.guess) == 2) {
-                    this.checkForPairs();
-                }
-            }
-        }
-    }
-
-    checkForPairs() {
-        let guess1 = this.state.cards[this.state.guess[0]];
-        let guess2 = this.state.cards[this.state.guess[1]];
-        let guessArr = this.state.guess;
-        if (guess1 == guess2) {
-            guessArr = ClearArray(guessArr);
-            let state1 = _.extend(this.state, {
-                foundPairs: this.state.foundPairs.concat(guess1),
-                guess: guessArr,
-            });
-            this.setState(state1);
-            setTimeout(() => {
-                if (this.state.foundPairs.length == 8) {
-                    window.alert("You've won!");
-                }
-            }, 100);
-        }
-        else {
-            setTimeout(() => {
-                guessArr = ClearArray(guessArr);
-                let state1 = _.extend(this.state, {
-                    guess: guessArr,
-                });
-                this.setState(state1);
-            }, 1000);
-        }
+        this.channel.push("click", {index: cardIndex})
+            .receive("ok", this.showView.bind(this));
     }
 
     resetBtnClick(me) {
-        let cardsArr = _.shuffle(this.state.cards);
-        let guessArr = this.state.guess;
-        let foundPairsArr = this.state.foundPairs;
-        let newScore = 0;
-        guessArr = ClearArray(guessArr);
-        foundPairsArr = ClearArray(foundPairsArr);
-        let state1 = _.extend({
-            cards: cardsArr,
-            guess: guessArr,
-            foundPairs: foundPairsArr,
-            score: newScore,
-        });
-        this.setState(state1);
+        this.channel.push("new")
+            .receive("ok", this.showView.bind(this));
     }
 
     render() {
@@ -124,31 +75,22 @@ class MemoryGame extends React.Component {
     }
 }
 
-class Card extends React.Component {
-    constructor(props) {
-        super(props);
-    }
-
-    render() {
-        return (
-            <div className="card" onClick={ (me) => 
-                        this.props.clickEvent(me, 
-                                this.props.cardIndex) }>
-                <h1>{ (this.props.flipped ? 
-                        this.props.letter : "?") }</h1>
-            </div>
-        );
-    }
+function Card({letter, cardIndex, flipped, clickEvent}) {
+    return (
+        <div className="card" onClick={ (me) => 
+                clickEvent(me, cardIndex) }>
+            <h1>{ (flipped ? letter : letter) }</h1>
+        </div>
+    );
 }
 
 function DrawRow({cardLets, foundPairs, guess, click, row}) {
     return (
         <div className="row"> {
-            cardLets.map((cardLet, col) => 
-                (<Card letter={cardLet} 
+            cardLets.map((card, col) => 
+                (<Card letter={card.letter} 
                       cardIndex={(row * 4) + col}
-                      flipped={((_.contains(guess, (row * 4) + col))
-                              || _.contains(foundPairs, cardLet))} 
+                      flipped={card.flipped}
                       clickEvent={click}/>)
            )          
         }
@@ -170,11 +112,4 @@ function DrawScore({score}) {
             <h5>Your score is:  { score }</h5>
         </div>
     );
-}
-
-function ClearArray(array) {
-    while (array.length != 0) {
-        array.pop();
-    }
-    return array;
 }
